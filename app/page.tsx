@@ -6,6 +6,7 @@ type Product = {
   id: string;
   barcode: string;
   name: string;
+  categoryName: string;
   costPrice: number;
   sellingPrice: number;
   stockQty: number;
@@ -22,6 +23,7 @@ type SaleItem = {
   productId: string;
   productName: string;
   productBarcode: string;
+  categoryName: string;
   quantity: number;
   unitCost: number;
   unitPrice: number;
@@ -41,19 +43,22 @@ type Sale = {
 type ProductForm = {
   barcode: string;
   name: string;
+  categoryName: string;
   costPrice: string;
   sellingPrice: string;
   stockQty: string;
   lowStockAt: string;
 };
 
-const storageKey = "scanledger-state-v1";
+const storageKey = "scanledger-state-v2";
+const uncategorized = "Uncategorized";
 
 const seedProducts: Product[] = [
   {
     id: "prod-rice-5kg",
     barcode: "600100100001",
     name: "Mama Gold Rice 5kg",
+    categoryName: "Foodstuff",
     costPrice: 9800,
     sellingPrice: 12500,
     stockQty: 16,
@@ -64,6 +69,7 @@ const seedProducts: Product[] = [
     id: "prod-soap",
     barcode: "600100100002",
     name: "Fresh Bar Soap",
+    categoryName: "Household",
     costPrice: 450,
     sellingPrice: 700,
     stockQty: 28,
@@ -74,6 +80,7 @@ const seedProducts: Product[] = [
     id: "prod-milk",
     barcode: "600100100003",
     name: "Peak Milk Sachet",
+    categoryName: "Beverages",
     costPrice: 290,
     sellingPrice: 400,
     stockQty: 7,
@@ -85,6 +92,7 @@ const seedProducts: Product[] = [
 const emptyForm: ProductForm = {
   barcode: "",
   name: "",
+  categoryName: "",
   costPrice: "",
   sellingPrice: "",
   stockQty: "",
@@ -107,6 +115,11 @@ function makeId(prefix: string) {
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function normalizeCategory(value: string) {
+  const clean = value.trim();
+  return clean.length ? clean : uncategorized;
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>(seedProducts);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -117,12 +130,19 @@ export default function Home() {
   const [form, setForm] = useState<ProductForm>(emptyForm);
 
   useEffect(() => {
-    const raw = window.localStorage.getItem(storageKey);
+    const raw = window.localStorage.getItem(storageKey) ?? window.localStorage.getItem("scanledger-state-v1");
     if (!raw) return;
 
     try {
-      const parsed = JSON.parse(raw) as { products?: Product[]; sales?: Sale[] };
-      setProducts(parsed.products?.length ? parsed.products : seedProducts);
+      const parsed = JSON.parse(raw) as { products?: Partial<Product>[]; sales?: Sale[] };
+      const restoredProducts = parsed.products?.length
+        ? parsed.products.map((product) => ({
+            ...product,
+            categoryName: normalizeCategory(product.categoryName ?? ""),
+            createdAt: product.createdAt ?? new Date().toISOString()
+          })) as Product[]
+        : seedProducts;
+      setProducts(restoredProducts);
       setSales(parsed.sales ?? []);
     } catch {
       window.localStorage.removeItem(storageKey);
@@ -133,9 +153,20 @@ export default function Home() {
     window.localStorage.setItem(storageKey, JSON.stringify({ products, sales }));
   }, [products, sales]);
 
-  const productById = useMemo(() => {
-    return new Map(products.map((product) => [product.id, product]));
-  }, [products]);
+  const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
+  const categories = useMemo(
+    () => [...new Set(products.map((product) => normalizeCategory(product.categoryName)))].sort(),
+    [products]
+  );
+
+  const groupedProducts = useMemo(() => {
+    return categories.map((category) => ({
+      category,
+      products: products
+        .filter((product) => normalizeCategory(product.categoryName) === category)
+        .sort((a, b) => a.name.localeCompare(b.name))
+    }));
+  }, [categories, products]);
 
   const cartRows = useMemo(() => {
     return cart
@@ -152,7 +183,6 @@ export default function Home() {
   const cartSubtotal = cartRows.reduce((sum, item) => sum + item.lineTotal, 0);
   const cartProfit = cartRows.reduce((sum, item) => sum + item.lineProfit, 0);
   const cartCost = cartRows.reduce((sum, item) => sum + item.quantity * item.product.costPrice, 0);
-
   const todaySales = sales.filter((sale) => todayKey(new Date(sale.paidAt)) === todayKey());
   const dailySales = todaySales.reduce((sum, sale) => sum + sale.subtotal, 0);
   const dailyProfit = todaySales.reduce((sum, sale) => sum + sale.profit, 0);
@@ -186,7 +216,7 @@ export default function Home() {
         item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item
       );
     });
-    setStatus(`${product.name} added to cart.`);
+    setStatus(`${product.name} added to cart from ${product.categoryName}.`);
   }
 
   function submitScan(event: FormEvent<HTMLFormElement>) {
@@ -217,6 +247,7 @@ export default function Home() {
       productId: item.product.id,
       productName: item.product.name,
       productBarcode: item.product.barcode,
+      categoryName: item.product.categoryName,
       quantity: item.quantity,
       unitCost: item.product.costPrice,
       unitPrice: item.product.sellingPrice,
@@ -243,7 +274,6 @@ export default function Home() {
     setSales((current) => [sale, ...current]);
     setCart([]);
     setStatus(`Sale confirmed: ${money(sale.subtotal)} recorded with ${money(sale.profit)} profit.`);
-    setActiveTab("checkout");
   }
 
   function createProduct(event: FormEvent<HTMLFormElement>) {
@@ -251,6 +281,7 @@ export default function Home() {
 
     const barcode = form.barcode.trim();
     const name = form.name.trim();
+    const categoryName = normalizeCategory(form.categoryName);
     const costPrice = Number(form.costPrice);
     const sellingPrice = Number(form.sellingPrice);
     const stockQty = Number.parseInt(form.stockQty, 10);
@@ -268,7 +299,7 @@ export default function Home() {
       stockQty < 0 ||
       lowStockAt < 0
     ) {
-      setStatus("Product details need a name, barcode, valid prices, and stock quantity.");
+      setStatus("Product details need a name, barcode, category, valid prices, and stock quantity.");
       return;
     }
 
@@ -281,6 +312,7 @@ export default function Home() {
       id: makeId("prod"),
       barcode,
       name,
+      categoryName,
       costPrice,
       sellingPrice,
       stockQty,
@@ -290,7 +322,7 @@ export default function Home() {
 
     setProducts((current) => [product, ...current]);
     setForm(emptyForm);
-    setStatus(`${product.name} created and ready for scanning.`);
+    setStatus(`${product.name} created in ${product.categoryName}.`);
   }
 
   function stockPill(product: Product) {
@@ -336,8 +368,8 @@ export default function Home() {
               <div className="metric-value">{money(dailyProfit)}</div>
             </div>
             <div className="metric">
-              <div className="metric-label">Low stock</div>
-              <div className="metric-value">{lowStockItems.length}</div>
+              <div className="metric-label">Categories</div>
+              <div className="metric-value">{categories.length}</div>
             </div>
           </div>
 
@@ -355,7 +387,9 @@ export default function Home() {
                     <div className="low-stock-row" key={product.id}>
                       <div>
                         <strong>{product.name}</strong>
-                        <div className="cart-meta">{product.barcode}</div>
+                        <div className="cart-meta">
+                          {product.categoryName} | {product.barcode}
+                        </div>
                       </div>
                       <span className="pill low">{product.stockQty} left</span>
                     </div>
@@ -382,8 +416,7 @@ export default function Home() {
                     value={scanValue}
                   />
                   <button className="button primary" type="submit">
-                    <span className="icon">+</span>
-                    Add Scan
+                    + Add Scan
                   </button>
                 </form>
                 <div className="status-line" role="status">
@@ -397,12 +430,7 @@ export default function Home() {
                     <h2 className="panel-title">Checkout Cart</h2>
                     <p className="panel-note">Each confirmed sale updates stock and profit immediately.</p>
                   </div>
-                  <button
-                    className="button secondary"
-                    disabled={!cartRows.length}
-                    onClick={() => setCart([])}
-                    type="button"
-                  >
+                  <button className="button secondary" disabled={!cartRows.length} onClick={() => setCart([])}>
                     Clear
                   </button>
                 </div>
@@ -415,16 +443,12 @@ export default function Home() {
                             <div>
                               <div className="cart-name">{item.product.name}</div>
                               <div className="cart-meta">
-                                {item.product.barcode} | {money(item.product.sellingPrice)} each | stock{" "}
-                                {item.product.stockQty}
+                                {item.product.categoryName} | {item.product.barcode} |{" "}
+                                {money(item.product.sellingPrice)} each | stock {item.product.stockQty}
                               </div>
                             </div>
                             <div className="qty-control" aria-label={`${item.product.name} quantity`}>
-                              <button
-                                className="qty-button"
-                                onClick={() => changeCartQuantity(item.product.id, -1)}
-                                type="button"
-                              >
+                              <button className="qty-button" onClick={() => changeCartQuantity(item.product.id, -1)}>
                                 -
                               </button>
                               <div className="qty-count">{item.quantity}</div>
@@ -432,7 +456,6 @@ export default function Home() {
                                 className="qty-button"
                                 disabled={item.quantity >= item.product.stockQty}
                                 onClick={() => changeCartQuantity(item.product.id, 1)}
-                                type="button"
                               >
                                 +
                               </button>
@@ -476,7 +499,7 @@ export default function Home() {
                 <div className="panel-header">
                   <div>
                     <h2 className="panel-title">Create Product</h2>
-                    <p className="panel-note">Barcode, pricing, and stock quantity become the scan source of truth.</p>
+                    <p className="panel-note">Add the product type or category so inventory stays grouped.</p>
                   </div>
                 </div>
                 <div className="panel-body">
@@ -490,6 +513,22 @@ export default function Home() {
                           onChange={(event) => setForm({ ...form, name: event.target.value })}
                           value={form.name}
                         />
+                      </div>
+                      <div className="field">
+                        <label htmlFor="categoryName">Category / type</label>
+                        <input
+                          className="input"
+                          id="categoryName"
+                          list="category-options"
+                          onChange={(event) => setForm({ ...form, categoryName: event.target.value })}
+                          placeholder="Foodstuff, Drinks, Household"
+                          value={form.categoryName}
+                        />
+                        <datalist id="category-options">
+                          {categories.map((category) => (
+                            <option key={category} value={category} />
+                          ))}
+                        </datalist>
                       </div>
                       <div className="field">
                         <label htmlFor="barcode">Barcode</label>
@@ -549,8 +588,7 @@ export default function Home() {
                     </div>
                     <div className="button-row">
                       <button className="button primary" type="submit">
-                        <span className="icon">+</span>
-                        Save Product
+                        + Save Product
                       </button>
                     </div>
                   </form>
@@ -560,8 +598,8 @@ export default function Home() {
               <section className="panel">
                 <div className="panel-header">
                   <div>
-                    <h2 className="panel-title">Inventory</h2>
-                    <p className="panel-note">Current stock and pricing used by checkout scans.</p>
+                    <h2 className="panel-title">Inventory by Category</h2>
+                    <p className="panel-note">Products are grouped by type for quicker stock review.</p>
                   </div>
                 </div>
                 <div className="table-wrap">
@@ -577,15 +615,24 @@ export default function Home() {
                       </tr>
                     </thead>
                     <tbody>
-                      {products.map((product) => (
-                        <tr key={product.id}>
-                          <td>{product.name}</td>
-                          <td>{product.barcode}</td>
-                          <td className="number-cell">{money(product.costPrice)}</td>
-                          <td className="number-cell">{money(product.sellingPrice)}</td>
-                          <td className="number-cell">{product.stockQty}</td>
-                          <td>{stockPill(product)}</td>
-                        </tr>
+                      {groupedProducts.map((group) => (
+                        <>
+                          <tr className="category-heading" key={`${group.category}-heading`}>
+                            <td colSpan={6}>
+                              {group.category} ({group.products.length})
+                            </td>
+                          </tr>
+                          {group.products.map((product) => (
+                            <tr key={product.id}>
+                              <td>{product.name}</td>
+                              <td>{product.barcode}</td>
+                              <td className="number-cell">{money(product.costPrice)}</td>
+                              <td className="number-cell">{money(product.sellingPrice)}</td>
+                              <td className="number-cell">{product.stockQty}</td>
+                              <td>{stockPill(product)}</td>
+                            </tr>
+                          ))}
+                        </>
                       ))}
                     </tbody>
                   </table>
@@ -599,7 +646,7 @@ export default function Home() {
               <div className="panel-header">
                 <div>
                   <h2 className="panel-title">Sales Ledger</h2>
-                  <p className="panel-note">Completed transactions with item detail and profit.</p>
+                  <p className="panel-note">Completed transactions with item detail, category, and profit.</p>
                 </div>
               </div>
               <div className="panel-body">
@@ -619,7 +666,7 @@ export default function Home() {
                         </div>
                         <div className="sale-detail">
                           {sale.items
-                            .map((item) => `${item.quantity}x ${item.productName} (${item.productBarcode})`)
+                            .map((item) => `${item.quantity}x ${item.productName} [${item.categoryName}]`)
                             .join(", ")}
                         </div>
                       </article>
