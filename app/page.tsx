@@ -452,55 +452,25 @@ export default function Home() {
         </nav>
       </header>
 
-      <section className="main-grid">
-        <aside className="workspace">
-          <div className="metrics">
-            <div className="metric">
-              <div className="metric-label">Today sales</div>
-              <div className="metric-value">{money(dailySales)}</div>
-            </div>
-            <div className="metric">
-              <div className="metric-label">Today profit</div>
-              <div className="metric-value">{money(dailyProfit)}</div>
-            </div>
-            <div className="metric">
-              <div className="metric-label">Categories</div>
-              <div className="metric-value">{categories.length}</div>
-            </div>
-          </div>
-
-          <section className="panel">
-            <div className="panel-header">
-              <div>
-                <h2 className="panel-title">Low Stock Watch</h2>
-                <p className="panel-note">Items at or below their reorder threshold.</p>
-              </div>
-            </div>
-            <div className="panel-body">
-              {lowStockItems.length ? (
-                <div className="low-stock-list">
-                  {lowStockItems.map((product) => (
-                    <div className="low-stock-row" key={product.id}>
-                      <div>
-                        <strong>{product.name}</strong>
-                        <div className="cart-meta">
-                          {product.categoryName} | {product.barcode}
-                        </div>
-                      </div>
-                      <span className="pill low">{product.stockQty} left</span>
-                    </div>
-                  ))}
+      <section className={`main-grid ${activeTab === "checkout" ? "checkout-grid" : ""}`}>
+        {activeTab === "checkout" ? (
+          <>
+            <section className="checkout-stream">
+              <div className="metrics">
+                <div className="metric">
+                  <div className="metric-label">Today sales</div>
+                  <div className="metric-value">{money(dailySales)}</div>
                 </div>
-              ) : (
-                <div className="empty-state">No products are below threshold.</div>
-              )}
-            </div>
-          </section>
-        </aside>
+                <div className="metric">
+                  <div className="metric-label">Today profit</div>
+                  <div className="metric-value">{money(dailyProfit)}</div>
+                </div>
+                <div className="metric">
+                  <div className="metric-label">Categories</div>
+                  <div className="metric-value">{categories.length}</div>
+                </div>
+              </div>
 
-        <section className="workspace">
-          {activeTab === "checkout" && (
-            <>
               <section className="scan-box">
                 <form className="scan-row" onSubmit={submitScan}>
                   <input
@@ -521,6 +491,36 @@ export default function Home() {
               </section>
 
               <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">Low Stock Watch</h2>
+                    <p className="panel-note">Items at or below their reorder threshold.</p>
+                  </div>
+                </div>
+                <div className="panel-body">
+                  {lowStockItems.length ? (
+                    <div className="low-stock-list">
+                      {lowStockItems.map((product) => (
+                        <div className="low-stock-row" key={product.id}>
+                          <div>
+                            <strong>{product.name}</strong>
+                            <div className="cart-meta">
+                              {product.categoryName} | {product.barcode}
+                            </div>
+                          </div>
+                          <span className="pill low">{product.stockQty} left</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="empty-state">No products are below threshold.</div>
+                  )}
+                </div>
+              </section>
+            </section>
+
+            <aside className="cart-summary-zone">
+              <section className="panel cart-panel">
                 <div className="panel-header">
                   <div>
                     <h2 className="panel-title">Checkout Cart</h2>
@@ -586,8 +586,56 @@ export default function Home() {
                   )}
                 </div>
               </section>
-            </>
-          )}
+            </aside>
+          </>
+        ) : (
+          <>
+        <aside className="workspace">
+          <div className="metrics">
+            <div className="metric">
+              <div className="metric-label">Today sales</div>
+              <div className="metric-value">{money(dailySales)}</div>
+            </div>
+            <div className="metric">
+              <div className="metric-label">Today profit</div>
+              <div className="metric-value">{money(dailyProfit)}</div>
+            </div>
+            <div className="metric">
+              <div className="metric-label">Categories</div>
+              <div className="metric-value">{categories.length}</div>
+            </div>
+          </div>
+
+          <section className="panel">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Low Stock Watch</h2>
+                <p className="panel-note">Items at or below their reorder threshold.</p>
+              </div>
+            </div>
+            <div className="panel-body">
+              {lowStockItems.length ? (
+                <div className="low-stock-list">
+                  {lowStockItems.map((product) => (
+                    <div className="low-stock-row" key={product.id}>
+                      <div>
+                        <strong>{product.name}</strong>
+                        <div className="cart-meta">
+                          {product.categoryName} | {product.barcode}
+                        </div>
+                      </div>
+                      <span className="pill low">{product.stockQty} left</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state">No products are below threshold.</div>
+              )}
+            </div>
+          </section>
+        </aside>
+
+        <section className="workspace">
 
           {activeTab === "products" && (
             <>
@@ -775,6 +823,8 @@ export default function Home() {
             </section>
           )}
         </section>
+          </>
+        )}
       </section>
     </main>
   );
