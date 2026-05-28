@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
 
 type Product = {
   id: string;
@@ -126,6 +126,19 @@ function normalizeCategory(value: string) {
   return clean.length ? clean : uncategorized;
 }
 
+function resolveProductCategory(product: Partial<Product>) {
+  const normalizedCategory = normalizeCategory(product.categoryName ?? "");
+  const seededProduct = seedProducts.find(
+    (currentProduct) => currentProduct.id === product.id || currentProduct.barcode === product.barcode
+  );
+
+  if (seededProduct && normalizedCategory === uncategorized) {
+    return seededProduct.categoryName;
+  }
+
+  return normalizedCategory;
+}
+
 function normalizeCart(cartItems: CartItem[], products: Product[]) {
   return cartItems
     .map((item) => {
@@ -162,7 +175,7 @@ export default function Home() {
         restoredProducts = parsed.products?.length
           ? (parsed.products.map((product) => ({
               ...product,
-              categoryName: normalizeCategory(product.categoryName ?? ""),
+              categoryName: resolveProductCategory(product),
               createdAt: product.createdAt ?? new Date().toISOString()
             })) as Product[])
           : seedProducts;
@@ -760,8 +773,8 @@ export default function Home() {
                     </thead>
                     <tbody>
                       {groupedProducts.map((group) => (
-                        <>
-                          <tr className="category-heading" key={`${group.category}-heading`}>
+                        <Fragment key={group.category}>
+                          <tr className="category-heading">
                             <td colSpan={6}>
                               {group.category} ({group.products.length})
                             </td>
@@ -776,7 +789,7 @@ export default function Home() {
                               <td>{stockPill(product)}</td>
                             </tr>
                           ))}
-                        </>
+                        </Fragment>
                       ))}
                     </tbody>
                   </table>
