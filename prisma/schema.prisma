@@ -23,7 +23,7 @@ model Product {
   costPrice    Decimal    @db.Decimal(12, 2)
   sellingPrice Decimal    @db.Decimal(12, 2)
   stockQty     Int
-  lowStockAt   Int        @default(5)
+  lowStockAt   Int        @default(5) @map("low_stock_threshold")
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   category     Category?  @relation(fields: [categoryId], references: [id])

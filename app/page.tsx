@@ -40,6 +40,11 @@ type Sale = {
   paidAt: string;
 };
 
+type Toast = {
+  id: string;
+  message: string;
+};
+
 type ProductForm = {
   barcode: string;
   name: string;
@@ -143,6 +148,7 @@ export default function Home() {
   const [status, setStatus] = useState("Scan or enter a barcode to begin checkout.");
   const [activeTab, setActiveTab] = useState<"checkout" | "products" | "sales">("checkout");
   const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [toasts, setToasts] = useState<Toast[]>([]);
   const [hasLoadedStoredCart, setHasLoadedStoredCart] = useState(false);
 
   useEffect(() => {
@@ -196,6 +202,16 @@ export default function Home() {
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify({ products, sales }));
   }, [products, sales]);
+
+  useEffect(() => {
+    if (!toasts.length) return;
+
+    const timer = window.setTimeout(() => {
+      setToasts((current) => current.slice(0, -1));
+    }, 6500);
+
+    return () => window.clearTimeout(timer);
+  }, [toasts]);
 
   const productById = useMemo(() => new Map(products.map((product) => [product.id, product])), [products]);
   const categories = useMemo(
@@ -308,6 +324,24 @@ export default function Home() {
       paidAt: new Date().toISOString()
     };
 
+    const lowStockToasts = saleItems
+      .map((item) => {
+        const product = products.find((currentProduct) => currentProduct.id === item.productId);
+        if (!product) return null;
+
+        const remainingStock = product.stockQty - item.quantity;
+        const hasJustDippedBelowThreshold =
+          product.stockQty >= product.lowStockAt && remainingStock < product.lowStockAt;
+
+        if (!hasJustDippedBelowThreshold) return null;
+
+        return {
+          id: makeId("toast"),
+          message: `⚠️ ${product.name} is running low (${remainingStock} left).`
+        };
+      })
+      .filter(Boolean) as Toast[];
+
     setProducts((current) =>
       current.map((product) => {
         const soldItem = saleItems.find((item) => item.productId === product.id);
@@ -319,6 +353,7 @@ export default function Home() {
     setCart([]);
     window.localStorage.removeItem(cartStorageKey);
     setStatus(`Sale confirmed: ${money(sale.subtotal)} recorded with ${money(sale.profit)} profit.`);
+    setToasts((current) => [...lowStockToasts, ...current].slice(0, 4));
   }
 
   function createProduct(event: FormEvent<HTMLFormElement>) {
@@ -378,6 +413,22 @@ export default function Home() {
 
   return (
     <main className="app-shell">
+      <div className="toast-stack" aria-live="polite" aria-atomic="true">
+        {toasts.map((toast) => (
+          <div className="toast" key={toast.id}>
+            <span>{toast.message}</span>
+            <button
+              aria-label="Dismiss notification"
+              className="toast-close"
+              onClick={() => setToasts((current) => current.filter((currentToast) => currentToast.id !== toast.id))}
+              type="button"
+            >
+              x
+            </button>
+          </div>
+        ))}
+      </div>
+
       <header className="topbar">
         <div className="brand-block">
           <div className="brand-mark">SL</div>

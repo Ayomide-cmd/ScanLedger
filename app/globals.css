@@ -45,6 +45,46 @@ button:disabled {
   min-height: 100vh;
 }
 
+.toast-stack {
+  display: grid;
+  gap: 10px;
+  max-width: min(420px, calc(100vw - 32px));
+  position: fixed;
+  right: 18px;
+  top: 88px;
+  z-index: 30;
+}
+
+.toast {
+  align-items: center;
+  background: #fff9df;
+  border: 1px solid #e0b84b;
+  border-left: 5px solid #b77900;
+  border-radius: 8px;
+  box-shadow: 0 14px 36px rgba(41, 31, 9, 0.18);
+  color: #3f2f05;
+  display: grid;
+  font-size: 14px;
+  font-weight: 800;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  line-height: 1.35;
+  padding: 12px 12px 12px 14px;
+}
+
+.toast-close {
+  align-items: center;
+  background: rgba(63, 47, 5, 0.08);
+  border: 1px solid rgba(63, 47, 5, 0.18);
+  border-radius: 6px;
+  color: #3f2f05;
+  display: grid;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
 .topbar {
   align-items: center;
   background: var(--surface);
@@ -466,5 +506,11 @@ th {
 
   .cart-item {
     grid-template-columns: 1fr;
+  }
+
+  .toast-stack {
+    left: 16px;
+    right: 16px;
+    top: 118px;
   }
 }
