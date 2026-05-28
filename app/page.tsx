@@ -51,6 +51,7 @@ type ProductForm = {
 };
 
 const storageKey = "scanledger-state-v2";
+const cartStorageKey = "scanledger-active-cart-v1";
 const uncategorized = "Uncategorized";
 
 const seedProducts: Product[] = [
@@ -120,6 +121,20 @@ function normalizeCategory(value: string) {
   return clean.length ? clean : uncategorized;
 }
 
+function normalizeCart(cartItems: CartItem[], products: Product[]) {
+  return cartItems
+    .map((item) => {
+      const product = products.find((currentProduct) => currentProduct.id === item.productId);
+      if (!product || product.stockQty <= 0) return null;
+
+      const quantity = Math.min(product.stockQty, Math.max(1, Math.floor(Number(item.quantity))));
+      if (!Number.isFinite(quantity)) return null;
+
+      return { productId: product.id, quantity };
+    })
+    .filter(Boolean) as CartItem[];
+}
+
 export default function Home() {
   const [products, setProducts] = useState<Product[]>(seedProducts);
   const [sales, setSales] = useState<Sale[]>([]);
@@ -128,26 +143,55 @@ export default function Home() {
   const [status, setStatus] = useState("Scan or enter a barcode to begin checkout.");
   const [activeTab, setActiveTab] = useState<"checkout" | "products" | "sales">("checkout");
   const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [hasLoadedStoredCart, setHasLoadedStoredCart] = useState(false);
 
   useEffect(() => {
     const raw = window.localStorage.getItem(storageKey) ?? window.localStorage.getItem("scanledger-state-v1");
-    if (!raw) return;
+    const rawCart = window.localStorage.getItem(cartStorageKey);
+    let restoredProducts = seedProducts;
 
     try {
-      const parsed = JSON.parse(raw) as { products?: Partial<Product>[]; sales?: Sale[] };
-      const restoredProducts = parsed.products?.length
-        ? parsed.products.map((product) => ({
-            ...product,
-            categoryName: normalizeCategory(product.categoryName ?? ""),
-            createdAt: product.createdAt ?? new Date().toISOString()
-          })) as Product[]
-        : seedProducts;
-      setProducts(restoredProducts);
-      setSales(parsed.sales ?? []);
+      if (raw) {
+        const parsed = JSON.parse(raw) as { products?: Partial<Product>[]; sales?: Sale[] };
+        restoredProducts = parsed.products?.length
+          ? (parsed.products.map((product) => ({
+              ...product,
+              categoryName: normalizeCategory(product.categoryName ?? ""),
+              createdAt: product.createdAt ?? new Date().toISOString()
+            })) as Product[])
+          : seedProducts;
+
+        setProducts(restoredProducts);
+        setSales(parsed.sales ?? []);
+      }
+
+      const restoredCart = rawCart ? (JSON.parse(rawCart) as CartItem[]) : [];
+      const activeCart = normalizeCart(restoredCart, restoredProducts);
+      setCart(activeCart);
+
+      if (activeCart.length) {
+        const restoredCount = activeCart.reduce((sum, item) => sum + item.quantity, 0);
+        setStatus(`Restored saved checkout cart with ${restoredCount} item(s).`);
+      }
     } catch {
       window.localStorage.removeItem(storageKey);
+      window.localStorage.removeItem(cartStorageKey);
     }
+
+    setHasLoadedStoredCart(true);
   }, []);
+
+  useEffect(() => {
+    if (!hasLoadedStoredCart) return;
+    const activeCart = normalizeCart(cart, products);
+
+    if (!activeCart.length) {
+      window.localStorage.removeItem(cartStorageKey);
+      return;
+    }
+
+    window.localStorage.setItem(cartStorageKey, JSON.stringify(activeCart));
+  }, [cart, hasLoadedStoredCart, products]);
 
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify({ products, sales }));
@@ -273,6 +317,7 @@ export default function Home() {
     );
     setSales((current) => [sale, ...current]);
     setCart([]);
+    window.localStorage.removeItem(cartStorageKey);
     setStatus(`Sale confirmed: ${money(sale.subtotal)} recorded with ${money(sale.profit)} profit.`);
   }
 
