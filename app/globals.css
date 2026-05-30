@@ -385,22 +385,45 @@ th {
   color: #8c1d18;
 }
 
-.category-heading {
-  background: #f1f5f1;
-  color: var(--ink);
-  font-weight: 900;
-}
-
-.category-heading td {
-  border-bottom-color: #cad6d1;
-  padding: 10px;
-}
-
 .cart-list,
 .sales-list,
 .low-stock-list {
   display: grid;
   gap: 10px;
+}
+
+.category-sections {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.category-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.category-card-header {
+  align-items: center;
+  background: #f5f8f6;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 14px;
+}
+
+.category-card-header h3 {
+  font-size: 16px;
+  margin: 0;
+}
+
+.category-card-header p {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 4px 0 0;
 }
 
 .cart-item {

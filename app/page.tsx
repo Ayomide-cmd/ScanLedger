@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, Fragment, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Product = {
   id: string;
@@ -233,12 +233,18 @@ export default function Home() {
   );
 
   const groupedProducts = useMemo(() => {
-    return categories.map((category) => ({
-      category,
-      products: products
+    return categories.map((category) => {
+      const categoryProducts = products
         .filter((product) => normalizeCategory(product.categoryName) === category)
-        .sort((a, b) => a.name.localeCompare(b.name))
-    }));
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      return {
+        category,
+        products: categoryProducts,
+        totalStock: categoryProducts.reduce((sum, product) => sum + product.stockQty, 0),
+        lowStockCount: categoryProducts.filter((product) => product.stockQty <= product.lowStockAt).length
+      };
+    });
   }, [categories, products]);
 
   const cartRows = useMemo(() => {
@@ -759,40 +765,51 @@ export default function Home() {
                     <p className="panel-note">Products are grouped by type for quicker stock review.</p>
                   </div>
                 </div>
-                <div className="table-wrap">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>Product</th>
-                        <th>Barcode</th>
-                        <th className="number-cell">Cost</th>
-                        <th className="number-cell">Price</th>
-                        <th className="number-cell">Stock</th>
-                        <th>Status</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {groupedProducts.map((group) => (
-                        <Fragment key={group.category}>
-                          <tr className="category-heading">
-                            <td colSpan={6}>
-                              {group.category} ({group.products.length})
-                            </td>
-                          </tr>
-                          {group.products.map((product) => (
-                            <tr key={product.id}>
-                              <td>{product.name}</td>
-                              <td>{product.barcode}</td>
-                              <td className="number-cell">{money(product.costPrice)}</td>
-                              <td className="number-cell">{money(product.sellingPrice)}</td>
-                              <td className="number-cell">{product.stockQty}</td>
-                              <td>{stockPill(product)}</td>
+                <div className="category-sections">
+                  {groupedProducts.map((group) => (
+                    <section className="category-card" key={group.category}>
+                      <div className="category-card-header">
+                        <div>
+                          <h3>{group.category}</h3>
+                          <p>
+                            {group.products.length} product(s) | {group.totalStock} unit(s) in stock
+                          </p>
+                        </div>
+                        {group.lowStockCount ? (
+                          <span className="pill low">{group.lowStockCount} low</span>
+                        ) : (
+                          <span className="pill ok">Healthy</span>
+                        )}
+                      </div>
+
+                      <div className="table-wrap">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Product</th>
+                              <th>Barcode</th>
+                              <th className="number-cell">Cost</th>
+                              <th className="number-cell">Price</th>
+                              <th className="number-cell">Stock</th>
+                              <th>Status</th>
                             </tr>
-                          ))}
-                        </Fragment>
-                      ))}
-                    </tbody>
-                  </table>
+                          </thead>
+                          <tbody>
+                            {group.products.map((product) => (
+                              <tr key={product.id}>
+                                <td>{product.name}</td>
+                                <td>{product.barcode}</td>
+                                <td className="number-cell">{money(product.costPrice)}</td>
+                                <td className="number-cell">{money(product.sellingPrice)}</td>
+                                <td className="number-cell">{product.stockQty}</td>
+                                <td>{stockPill(product)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  ))}
                 </div>
               </section>
             </>
