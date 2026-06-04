@@ -113,6 +113,10 @@ function money(value: number) {
   }).format(value);
 }
 
+function percent(value: number) {
+  return `${Math.round(value)}%`;
+}
+
 function todayKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
@@ -159,7 +163,7 @@ export default function Home() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [scanValue, setScanValue] = useState("");
   const [status, setStatus] = useState("Scan or enter a barcode to begin checkout.");
-  const [activeTab, setActiveTab] = useState<"checkout" | "products" | "sales">("checkout");
+  const [activeTab, setActiveTab] = useState<"checkout" | "products" | "sales" | "insights">("checkout");
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [hasLoadedStoredCart, setHasLoadedStoredCart] = useState(false);
@@ -266,6 +270,57 @@ export default function Home() {
   const dailySales = todaySales.reduce((sum, sale) => sum + sale.subtotal, 0);
   const dailyProfit = todaySales.reduce((sum, sale) => sum + sale.profit, 0);
   const lowStockItems = products.filter((product) => product.stockQty <= product.lowStockAt);
+  const inventoryValue = products.reduce((sum, product) => sum + product.stockQty * product.costPrice, 0);
+  const projectedProfitOnHand = products.reduce(
+    (sum, product) => sum + product.stockQty * (product.sellingPrice - product.costPrice),
+    0
+  );
+  const saleItems = sales.flatMap((sale) => sale.items);
+  const totalRevenue = sales.reduce((sum, sale) => sum + sale.subtotal, 0);
+  const totalProfit = sales.reduce((sum, sale) => sum + sale.profit, 0);
+  const grossMargin = totalRevenue ? (totalProfit / totalRevenue) * 100 : 0;
+  const reorderQueue = [...products]
+    .filter((product) => product.stockQty <= product.lowStockAt)
+    .sort((a, b) => a.stockQty / Math.max(a.lowStockAt, 1) - b.stockQty / Math.max(b.lowStockAt, 1))
+    .map((product) => ({
+      ...product,
+      recommendedQty: Math.max(product.lowStockAt * 2 - product.stockQty, 1)
+    }));
+  const categoryInsights = groupedProducts
+    .map((group) => {
+      const soldItems = saleItems.filter((item) => normalizeCategory(item.categoryName) === group.category);
+      const revenue = soldItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const profit = soldItems.reduce((sum, item) => sum + item.lineProfit, 0);
+      const unitsSold = soldItems.reduce((sum, item) => sum + item.quantity, 0);
+
+      return {
+        ...group,
+        revenue,
+        profit,
+        unitsSold,
+        inventoryValue: group.products.reduce((sum, product) => sum + product.stockQty * product.costPrice, 0)
+      };
+    })
+    .sort((a, b) => b.revenue - a.revenue || a.category.localeCompare(b.category));
+  const maxCategoryRevenue = Math.max(...categoryInsights.map((category) => category.revenue), 1);
+  const productPerformance = [...productById.values()]
+    .map((product) => {
+      const soldItems = saleItems.filter((item) => item.productId === product.id);
+      const unitsSold = soldItems.reduce((sum, item) => sum + item.quantity, 0);
+      const revenue = soldItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const profit = soldItems.reduce((sum, item) => sum + item.lineProfit, 0);
+
+      return { product, unitsSold, revenue, profit };
+    })
+    .sort((a, b) => b.profit - a.profit || b.unitsSold - a.unitsSold)
+    .slice(0, 5);
+  const mostUrgentReorder = reorderQueue[0];
+  const commandInsight =
+    mostUrgentReorder
+      ? `${mostUrgentReorder.name} needs restock attention: ${mostUrgentReorder.stockQty} left, reorder ${mostUrgentReorder.recommendedQty}.`
+      : totalRevenue
+        ? `Trading is healthy today: ${money(totalRevenue)} revenue with ${percent(grossMargin)} gross margin.`
+        : "No urgent stock risk yet. Start recording sales to unlock performance insight.";
 
   function addScannedProduct(barcode: string) {
     const normalizedBarcode = barcode.trim();
@@ -458,7 +513,7 @@ export default function Home() {
         </div>
 
         <nav className="tabs" aria-label="Workspace sections">
-          {(["checkout", "products", "sales"] as const).map((tab) => (
+          {(["checkout", "products", "insights", "sales"] as const).map((tab) => (
             <button
               className={`tab-button ${activeTab === tab ? "active" : ""}`}
               key={tab}
@@ -810,6 +865,136 @@ export default function Home() {
                       </div>
                     </section>
                   ))}
+                </div>
+              </section>
+            </>
+          )}
+
+          {activeTab === "insights" && (
+            <>
+              <section className="panel command-panel">
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">Operations Command Center</h2>
+                    <p className="panel-note">{commandInsight}</p>
+                  </div>
+                </div>
+                <div className="command-metrics">
+                  <div className="command-metric">
+                    <span>Inventory value</span>
+                    <strong>{money(inventoryValue)}</strong>
+                  </div>
+                  <div className="command-metric">
+                    <span>Profit on hand</span>
+                    <strong>{money(projectedProfitOnHand)}</strong>
+                  </div>
+                  <div className="command-metric">
+                    <span>Gross margin</span>
+                    <strong>{percent(grossMargin)}</strong>
+                  </div>
+                  <div className="command-metric">
+                    <span>Reorder queue</span>
+                    <strong>{reorderQueue.length}</strong>
+                  </div>
+                </div>
+              </section>
+
+              <section className="insight-grid">
+                <section className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <h2 className="panel-title">Category Performance</h2>
+                      <p className="panel-note">Revenue, stock exposure, and risk by product type.</p>
+                    </div>
+                  </div>
+                  <div className="insight-list">
+                    {categoryInsights.map((category) => (
+                      <article className="category-insight" key={category.category}>
+                        <div className="insight-row">
+                          <div>
+                            <strong>{category.category}</strong>
+                            <div className="cart-meta">
+                              {category.unitsSold} sold | {money(category.inventoryValue)} in stock
+                            </div>
+                          </div>
+                          <div className="insight-money">
+                            <strong>{money(category.revenue)}</strong>
+                            <span>{money(category.profit)} profit</span>
+                          </div>
+                        </div>
+                        <div className="bar-track" aria-label={`${category.category} revenue share`}>
+                          <div
+                            className="bar-fill"
+                            style={{ width: `${Math.max(6, (category.revenue / maxCategoryRevenue) * 100)}%` }}
+                          />
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="panel">
+                  <div className="panel-header">
+                    <div>
+                      <h2 className="panel-title">Smart Reorder Queue</h2>
+                      <p className="panel-note">Recommended quantities based on each low-stock threshold.</p>
+                    </div>
+                  </div>
+                  <div className="insight-list">
+                    {reorderQueue.length ? (
+                      reorderQueue.map((product) => (
+                        <article className="reorder-card" key={product.id}>
+                          <div>
+                            <strong>{product.name}</strong>
+                            <div className="cart-meta">
+                              {product.categoryName} | threshold {product.lowStockAt}
+                            </div>
+                          </div>
+                          <div className="reorder-action">
+                            <span>{product.stockQty} left</span>
+                            <strong>Order {product.recommendedQty}</strong>
+                          </div>
+                        </article>
+                      ))
+                    ) : (
+                      <div className="empty-state">No reorder action needed right now.</div>
+                    )}
+                  </div>
+                </section>
+              </section>
+
+              <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">Profit Leaders</h2>
+                    <p className="panel-note">Products ranked by contribution to profit.</p>
+                  </div>
+                </div>
+                <div className="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Category</th>
+                        <th className="number-cell">Units sold</th>
+                        <th className="number-cell">Revenue</th>
+                        <th className="number-cell">Profit</th>
+                        <th className="number-cell">Stock</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productPerformance.map(({ product, unitsSold, revenue, profit }) => (
+                        <tr key={product.id}>
+                          <td>{product.name}</td>
+                          <td>{product.categoryName}</td>
+                          <td className="number-cell">{unitsSold}</td>
+                          <td className="number-cell">{money(revenue)}</td>
+                          <td className="number-cell">{money(profit)}</td>
+                          <td className="number-cell">{product.stockQty}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </section>
             </>

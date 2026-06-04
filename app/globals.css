@@ -242,6 +242,103 @@ button:disabled {
   font-weight: 800;
 }
 
+.command-panel {
+  background: #101514;
+  border-color: #101514;
+  color: white;
+}
+
+.command-panel .panel-header {
+  border-bottom-color: rgba(255, 255, 255, 0.14);
+}
+
+.command-panel .panel-note {
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.command-metrics {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.command-metric {
+  background: rgba(255, 255, 255, 0.06);
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+
+.command-metric span {
+  color: rgba(255, 255, 255, 0.68);
+  font-size: 12px;
+}
+
+.command-metric strong {
+  font-size: clamp(20px, 2.8vw, 30px);
+}
+
+.insight-grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(0, 1.1fr) minmax(320px, 0.9fr);
+}
+
+.insight-list {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+}
+
+.category-insight,
+.reorder-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+
+.insight-row,
+.reorder-card {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+}
+
+.insight-money,
+.reorder-action {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  text-align: right;
+}
+
+.insight-money span,
+.reorder-action span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.reorder-action strong {
+  color: var(--brand);
+}
+
+.bar-track {
+  background: #edf1ef;
+  border-radius: 12px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  background: linear-gradient(90deg, #006d5b, #35a27f);
+  border-radius: 12px;
+  height: 100%;
+}
+
 .form-grid {
   display: grid;
   gap: 12px;
@@ -527,6 +624,11 @@ th {
   }
 
   .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .command-metrics,
+  .insight-grid {
     grid-template-columns: 1fr;
   }
 
