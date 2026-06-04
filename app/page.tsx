@@ -7,6 +7,7 @@ type Product = {
   barcode: string;
   name: string;
   categoryName: string;
+  supplier: string;
   costPrice: number;
   sellingPrice: number;
   stockQty: number;
@@ -49,6 +50,7 @@ type ProductForm = {
   barcode: string;
   name: string;
   categoryName: string;
+  supplier: string;
   costPrice: string;
   sellingPrice: string;
   stockQty: string;
@@ -58,6 +60,7 @@ type ProductForm = {
 const storageKey = "scanledger-state-v2";
 const cartStorageKey = "scanledger-active-cart-v1";
 const uncategorized = "Uncategorized";
+const unknownSupplier = "Unassigned supplier";
 
 const seedProducts: Product[] = [
   {
@@ -65,6 +68,7 @@ const seedProducts: Product[] = [
     barcode: "600100100001",
     name: "Mama Gold Rice 5kg",
     categoryName: "Foodstuff",
+    supplier: "Lagos Food Depot",
     costPrice: 9800,
     sellingPrice: 12500,
     stockQty: 16,
@@ -76,6 +80,7 @@ const seedProducts: Product[] = [
     barcode: "600100100002",
     name: "Fresh Bar Soap",
     categoryName: "Household",
+    supplier: "Everyday Wholesale",
     costPrice: 450,
     sellingPrice: 700,
     stockQty: 28,
@@ -87,6 +92,7 @@ const seedProducts: Product[] = [
     barcode: "600100100003",
     name: "Peak Milk Sachet",
     categoryName: "Beverages",
+    supplier: "Dairy Direct",
     costPrice: 290,
     sellingPrice: 400,
     stockQty: 7,
@@ -99,6 +105,7 @@ const emptyForm: ProductForm = {
   barcode: "",
   name: "",
   categoryName: "",
+  supplier: "",
   costPrice: "",
   sellingPrice: "",
   stockQty: "",
@@ -143,6 +150,16 @@ function resolveProductCategory(product: Partial<Product>) {
   return normalizedCategory;
 }
 
+function resolveProductSupplier(product: Partial<Product>) {
+  const cleanSupplier = product.supplier?.trim();
+  const seededProduct = seedProducts.find(
+    (currentProduct) => currentProduct.id === product.id || currentProduct.barcode === product.barcode
+  );
+
+  if (cleanSupplier) return cleanSupplier;
+  return seededProduct?.supplier ?? unknownSupplier;
+}
+
 function normalizeCart(cartItems: CartItem[], products: Product[]) {
   return cartItems
     .map((item) => {
@@ -180,6 +197,7 @@ export default function Home() {
           ? (parsed.products.map((product) => ({
               ...product,
               categoryName: resolveProductCategory(product),
+              supplier: resolveProductSupplier(product),
               createdAt: product.createdAt ?? new Date().toISOString()
             })) as Product[])
           : seedProducts;
@@ -374,6 +392,22 @@ export default function Home() {
     );
   }
 
+  function increaseStock(productId: string, quantity: number, reason: "restock" | "return") {
+    const product = productById.get(productId);
+    if (!product) return;
+
+    setProducts((current) =>
+      current.map((currentProduct) =>
+        currentProduct.id === productId
+          ? { ...currentProduct, stockQty: currentProduct.stockQty + quantity }
+          : currentProduct
+      )
+    );
+    setStatus(
+      `${product.name} stock increased by ${quantity} from ${reason === "restock" ? "restocking" : "customer return"}.`
+    );
+  }
+
   function confirmSale() {
     if (!cartRows.length) return;
 
@@ -436,6 +470,7 @@ export default function Home() {
     const barcode = form.barcode.trim();
     const name = form.name.trim();
     const categoryName = normalizeCategory(form.categoryName);
+    const supplier = form.supplier.trim();
     const costPrice = Number(form.costPrice);
     const sellingPrice = Number(form.sellingPrice);
     const stockQty = Number.parseInt(form.stockQty, 10);
@@ -444,6 +479,7 @@ export default function Home() {
     if (
       !barcode ||
       !name ||
+      !supplier ||
       !Number.isFinite(costPrice) ||
       !Number.isFinite(sellingPrice) ||
       !Number.isFinite(stockQty) ||
@@ -453,7 +489,7 @@ export default function Home() {
       stockQty < 0 ||
       lowStockAt < 0
     ) {
-      setStatus("Product details need a name, barcode, category, valid prices, and stock quantity.");
+      setStatus("Product details need a name, barcode, supplier, valid prices, and stock quantity.");
       return;
     }
 
@@ -467,6 +503,7 @@ export default function Home() {
       barcode,
       name,
       categoryName,
+      supplier,
       costPrice,
       sellingPrice,
       stockQty,
@@ -758,6 +795,16 @@ export default function Home() {
                         />
                       </div>
                       <div className="field">
+                        <label htmlFor="supplier">Supplier</label>
+                        <input
+                          className="input"
+                          id="supplier"
+                          onChange={(event) => setForm({ ...form, supplier: event.target.value })}
+                          placeholder="Supplier or wholesaler name"
+                          value={form.supplier}
+                        />
+                      </div>
+                      <div className="field">
                         <label htmlFor="stockQty">Opening stock</label>
                         <input
                           className="input"
@@ -843,10 +890,12 @@ export default function Home() {
                             <tr>
                               <th>Product</th>
                               <th>Barcode</th>
+                              <th>Supplier</th>
                               <th className="number-cell">Cost</th>
                               <th className="number-cell">Price</th>
                               <th className="number-cell">Stock</th>
                               <th>Status</th>
+                              <th>Stock in</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -854,10 +903,29 @@ export default function Home() {
                               <tr key={product.id}>
                                 <td>{product.name}</td>
                                 <td>{product.barcode}</td>
+                                <td>{product.supplier}</td>
                                 <td className="number-cell">{money(product.costPrice)}</td>
                                 <td className="number-cell">{money(product.sellingPrice)}</td>
                                 <td className="number-cell">{product.stockQty}</td>
                                 <td>{stockPill(product)}</td>
+                                <td>
+                                  <div className="stock-actions">
+                                    <button
+                                      className="mini-button"
+                                      onClick={() => increaseStock(product.id, 1, "restock")}
+                                      type="button"
+                                    >
+                                      Restock +1
+                                    </button>
+                                    <button
+                                      className="mini-button"
+                                      onClick={() => increaseStock(product.id, 1, "return")}
+                                      type="button"
+                                    >
+                                      Return +1
+                                    </button>
+                                  </div>
+                                </td>
                               </tr>
                             ))}
                           </tbody>

@@ -20,6 +20,7 @@ model Product {
   name         String
   categoryId   String?
   categoryName String     @default("Uncategorized")
+  supplier     String
   costPrice    Decimal    @db.Decimal(12, 2)
   sellingPrice Decimal    @db.Decimal(12, 2)
   stockQty     Int

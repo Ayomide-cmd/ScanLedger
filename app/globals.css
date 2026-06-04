@@ -405,6 +405,23 @@ button:disabled {
   color: var(--ink);
 }
 
+.mini-button {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.mini-button:hover {
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
 .scan-box {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -487,6 +504,12 @@ th {
 .low-stock-list {
   display: grid;
   gap: 10px;
+}
+
+.stock-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .category-sections {
