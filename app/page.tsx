@@ -182,6 +182,7 @@ export default function Home() {
   const [status, setStatus] = useState("Scan or enter a barcode to begin checkout.");
   const [activeTab, setActiveTab] = useState<"checkout" | "products" | "sales" | "insights">("checkout");
   const [form, setForm] = useState<ProductForm>(emptyForm);
+  const [productFormMessage, setProductFormMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [hasLoadedStoredCart, setHasLoadedStoredCart] = useState(false);
 
@@ -466,6 +467,7 @@ export default function Home() {
 
   function createProduct(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setProductFormMessage("");
 
     const barcode = form.barcode.trim();
     const name = form.name.trim();
@@ -489,12 +491,16 @@ export default function Home() {
       stockQty < 0 ||
       lowStockAt < 0
     ) {
-      setStatus("Product details need a name, barcode, supplier, valid prices, and stock quantity.");
+      const message = "Add product name, barcode, supplier, prices, stock quantity, and low-stock threshold.";
+      setProductFormMessage(message);
+      setStatus(message);
       return;
     }
 
     if (products.some((product) => product.barcode === barcode)) {
-      setStatus(`Barcode ${barcode} is already assigned to a product.`);
+      const message = `Barcode ${barcode} is already assigned to a product.`;
+      setProductFormMessage(message);
+      setStatus(message);
       return;
     }
 
@@ -513,6 +519,7 @@ export default function Home() {
 
     setProducts((current) => [product, ...current]);
     setForm(emptyForm);
+    setProductFormMessage(`${product.name} saved with ${product.stockQty} unit(s) in stock.`);
     setStatus(`${product.name} created in ${product.categoryName}.`);
   }
 
@@ -766,6 +773,7 @@ export default function Home() {
                           className="input"
                           id="name"
                           onChange={(event) => setForm({ ...form, name: event.target.value })}
+                          required
                           value={form.name}
                         />
                       </div>
@@ -791,6 +799,7 @@ export default function Home() {
                           className="input"
                           id="barcode"
                           onChange={(event) => setForm({ ...form, barcode: event.target.value })}
+                          required
                           value={form.barcode}
                         />
                       </div>
@@ -801,6 +810,7 @@ export default function Home() {
                           id="supplier"
                           onChange={(event) => setForm({ ...form, supplier: event.target.value })}
                           placeholder="Supplier or wholesaler name"
+                          required
                           value={form.supplier}
                         />
                       </div>
@@ -811,6 +821,7 @@ export default function Home() {
                           id="stockQty"
                           min="0"
                           onChange={(event) => setForm({ ...form, stockQty: event.target.value })}
+                          required
                           type="number"
                           value={form.stockQty}
                         />
@@ -822,6 +833,7 @@ export default function Home() {
                           id="costPrice"
                           min="0"
                           onChange={(event) => setForm({ ...form, costPrice: event.target.value })}
+                          required
                           step="0.01"
                           type="number"
                           value={form.costPrice}
@@ -834,6 +846,7 @@ export default function Home() {
                           id="sellingPrice"
                           min="0"
                           onChange={(event) => setForm({ ...form, sellingPrice: event.target.value })}
+                          required
                           step="0.01"
                           type="number"
                           value={form.sellingPrice}
@@ -846,11 +859,17 @@ export default function Home() {
                           id="lowStockAt"
                           min="0"
                           onChange={(event) => setForm({ ...form, lowStockAt: event.target.value })}
+                          required
                           type="number"
                           value={form.lowStockAt}
                         />
                       </div>
                     </div>
+                    {productFormMessage ? (
+                      <div className="form-message" role="status">
+                        {productFormMessage}
+                      </div>
+                    ) : null}
                     <div className="button-row">
                       <button className="button primary" type="submit">
                         + Save Product

@@ -360,6 +360,17 @@ button:disabled {
   font-weight: 700;
 }
 
+.form-message {
+  background: #f5f8f6;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  margin-top: 14px;
+  padding: 11px 12px;
+}
+
 .input {
   background: white;
   border: 1px solid var(--line);
