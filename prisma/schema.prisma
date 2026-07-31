@@ -28,7 +28,8 @@ model Product {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   category     Category?  @relation(fields: [categoryId], references: [id])
-  saleItems    SaleItem[]
+  saleItems      SaleItem[]
+  stockMovements StockMovement[]
 
   @@index([categoryId])
 }
@@ -60,4 +61,30 @@ model SaleItem {
 
   @@index([saleId])
   @@index([productId])
+}
+
+enum StockMovementType {
+  SALE            @map("sale")
+  RESTOCK         @map("restock")
+  RETURN          @map("return")
+  PRODUCT_CREATED @map("product_created")
+}
+
+model StockMovement {
+  id             String            @id @default(cuid())
+  productId      String
+  productName    String
+  productBarcode String
+  supplier       String
+  movementType   StockMovementType
+  quantity       Int
+  previousStock  Int
+  newStock       Int
+  reason         String
+  createdAt      DateTime          @default(now())
+  product        Product           @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+  @@index([movementType])
+  @@index([createdAt])
 }

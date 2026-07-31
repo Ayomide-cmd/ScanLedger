@@ -41,6 +41,22 @@ type Sale = {
   paidAt: string;
 };
 
+type StockMovementType = "sale" | "restock" | "return" | "product_created";
+
+type StockMovement = {
+  id: string;
+  productId: string;
+  productName: string;
+  productBarcode: string;
+  supplier: string;
+  movementType: StockMovementType;
+  quantity: number;
+  previousStock: number;
+  newStock: number;
+  reason: string;
+  createdAt: string;
+};
+
 type Toast = {
   id: string;
   message: string;
@@ -177,6 +193,7 @@ function normalizeCart(cartItems: CartItem[], products: Product[]) {
 export default function Home() {
   const [products, setProducts] = useState<Product[]>(seedProducts);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [stockMovements, setStockMovements] = useState<StockMovement[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
   const [scanValue, setScanValue] = useState("");
   const [status, setStatus] = useState("Scan or enter a barcode to begin checkout.");
@@ -193,7 +210,11 @@ export default function Home() {
 
     try {
       if (raw) {
-        const parsed = JSON.parse(raw) as { products?: Partial<Product>[]; sales?: Sale[] };
+        const parsed = JSON.parse(raw) as {
+          products?: Partial<Product>[];
+          sales?: Sale[];
+          stockMovements?: StockMovement[];
+        };
         restoredProducts = parsed.products?.length
           ? (parsed.products.map((product) => ({
               ...product,
@@ -205,6 +226,7 @@ export default function Home() {
 
         setProducts(restoredProducts);
         setSales(parsed.sales ?? []);
+        setStockMovements(parsed.stockMovements ?? []);
       }
 
       const restoredCart = rawCart ? (JSON.parse(rawCart) as CartItem[]) : [];
@@ -236,8 +258,8 @@ export default function Home() {
   }, [cart, hasLoadedStoredCart, products]);
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify({ products, sales }));
-  }, [products, sales]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ products, sales, stockMovements }));
+  }, [products, sales, stockMovements]);
 
   useEffect(() => {
     if (!toasts.length) return;
@@ -334,6 +356,35 @@ export default function Home() {
     .sort((a, b) => b.profit - a.profit || b.unitsSold - a.unitsSold)
     .slice(0, 5);
   const mostUrgentReorder = reorderQueue[0];
+  const supplierReorderDrafts = Object.values(
+    reorderQueue.reduce<
+      Record<
+        string,
+        {
+          supplier: string;
+          items: Array<Product & { recommendedQty: number }>;
+          totalUnits: number;
+          estimatedCost: number;
+        }
+      >
+    >((drafts, product) => {
+      const supplier = product.supplier || unknownSupplier;
+      const currentDraft = drafts[supplier] ?? {
+        supplier,
+        items: [],
+        totalUnits: 0,
+        estimatedCost: 0
+      };
+
+      currentDraft.items.push(product);
+      currentDraft.totalUnits += product.recommendedQty;
+      currentDraft.estimatedCost += product.recommendedQty * product.costPrice;
+      drafts[supplier] = currentDraft;
+
+      return drafts;
+    }, {})
+  ).sort((a, b) => b.estimatedCost - a.estimatedCost);
+  const recentStockMovements = stockMovements.slice(0, 10);
   const commandInsight =
     mostUrgentReorder
       ? `${mostUrgentReorder.name} needs restock attention: ${mostUrgentReorder.stockQty} left, reorder ${mostUrgentReorder.recommendedQty}.`
@@ -393,9 +444,15 @@ export default function Home() {
     );
   }
 
+  function recordStockMovements(movements: StockMovement[]) {
+    if (!movements.length) return;
+    setStockMovements((current) => [...movements, ...current].slice(0, 100));
+  }
+
   function increaseStock(productId: string, quantity: number, reason: "restock" | "return") {
     const product = productById.get(productId);
     if (!product) return;
+    const newStock = product.stockQty + quantity;
 
     setProducts((current) =>
       current.map((currentProduct) =>
@@ -404,6 +461,21 @@ export default function Home() {
           : currentProduct
       )
     );
+    recordStockMovements([
+      {
+        id: makeId("move"),
+        productId: product.id,
+        productName: product.name,
+        productBarcode: product.barcode,
+        supplier: product.supplier,
+        movementType: reason,
+        quantity,
+        previousStock: product.stockQty,
+        newStock,
+        reason: reason === "restock" ? "Supplier restock" : "Customer return",
+        createdAt: new Date().toISOString()
+      }
+    ]);
     setStatus(
       `${product.name} stock increased by ${quantity} from ${reason === "restock" ? "restocking" : "customer return"}.`
     );
@@ -450,6 +522,26 @@ export default function Home() {
         };
       })
       .filter(Boolean) as Toast[];
+    const saleMovements = saleItems
+      .map((item) => {
+        const product = products.find((currentProduct) => currentProduct.id === item.productId);
+        if (!product) return null;
+
+        return {
+          id: makeId("move"),
+          productId: product.id,
+          productName: product.name,
+          productBarcode: product.barcode,
+          supplier: product.supplier,
+          movementType: "sale" as const,
+          quantity: -item.quantity,
+          previousStock: product.stockQty,
+          newStock: product.stockQty - item.quantity,
+          reason: `Sale ${sale.id}`,
+          createdAt: sale.paidAt
+        };
+      })
+      .filter(Boolean) as StockMovement[];
 
     setProducts((current) =>
       current.map((product) => {
@@ -459,6 +551,7 @@ export default function Home() {
       })
     );
     setSales((current) => [sale, ...current]);
+    recordStockMovements(saleMovements);
     setCart([]);
     window.localStorage.removeItem(cartStorageKey);
     setStatus(`Sale confirmed: ${money(sale.subtotal)} recorded with ${money(sale.profit)} profit.`);
@@ -518,6 +611,21 @@ export default function Home() {
     };
 
     setProducts((current) => [product, ...current]);
+    recordStockMovements([
+      {
+        id: makeId("move"),
+        productId: product.id,
+        productName: product.name,
+        productBarcode: product.barcode,
+        supplier: product.supplier,
+        movementType: "product_created",
+        quantity: product.stockQty,
+        previousStock: 0,
+        newStock: product.stockQty,
+        reason: "Opening stock",
+        createdAt: product.createdAt
+      }
+    ]);
     setForm(emptyForm);
     setProductFormMessage(`${product.name} saved with ${product.stockQty} unit(s) in stock.`);
     setStatus(`${product.name} created in ${product.categoryName}.`);
@@ -1048,6 +1156,80 @@ export default function Home() {
                     )}
                   </div>
                 </section>
+              </section>
+
+              <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">Supplier Reorder Draft</h2>
+                    <p className="panel-note">Low-stock replenishment grouped by supplier with estimated cost.</p>
+                  </div>
+                </div>
+                <div className="supplier-drafts">
+                  {supplierReorderDrafts.length ? (
+                    supplierReorderDrafts.map((draft) => (
+                      <article className="supplier-draft" key={draft.supplier}>
+                        <div className="supplier-draft-header">
+                          <div>
+                            <h3>{draft.supplier}</h3>
+                            <p>
+                              {draft.items.length} item(s) | {draft.totalUnits} unit(s)
+                            </p>
+                          </div>
+                          <strong>{money(draft.estimatedCost)}</strong>
+                        </div>
+                        <div className="draft-lines">
+                          {draft.items.map((item) => (
+                            <div className="draft-line" key={item.id}>
+                              <span>{item.name}</span>
+                              <strong>Order {item.recommendedQty}</strong>
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="empty-state">No supplier reorder draft needed right now.</div>
+                  )}
+                </div>
+              </section>
+
+              <section className="panel">
+                <div className="panel-header">
+                  <div>
+                    <h2 className="panel-title">Inventory Audit Trail</h2>
+                    <p className="panel-note">Every stock movement from sales, restocks, returns, and opening stock.</p>
+                  </div>
+                </div>
+                <div className="audit-list">
+                  {recentStockMovements.length ? (
+                    recentStockMovements.map((movement) => (
+                      <article className="audit-entry" key={movement.id}>
+                        <div className={`movement-type ${movement.movementType}`}>
+                          {movement.movementType.replace("_", " ")}
+                        </div>
+                        <div>
+                          <strong>{movement.productName}</strong>
+                          <div className="cart-meta">
+                            {movement.supplier} | {movement.reason} |{" "}
+                            {new Date(movement.createdAt).toLocaleString()}
+                          </div>
+                        </div>
+                        <div className="audit-stock">
+                          <strong>
+                            {movement.quantity > 0 ? "+" : ""}
+                            {movement.quantity}
+                          </strong>
+                          <span>
+                            {movement.previousStock} to {movement.newStock}
+                          </span>
+                        </div>
+                      </article>
+                    ))
+                  ) : (
+                    <div className="empty-state">No stock movements recorded yet.</div>
+                  )}
+                </div>
               </section>
 
               <section className="panel">
