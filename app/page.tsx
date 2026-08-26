@@ -57,6 +57,13 @@ type StockMovement = {
   createdAt: string;
 };
 
+type SupplierReorderDraft = {
+  supplier: string;
+  items: Array<Product & { recommendedQty: number }>;
+  totalUnits: number;
+  estimatedCost: number;
+};
+
 type Toast = {
   id: string;
   message: string;
@@ -200,6 +207,7 @@ export default function Home() {
   const [activeTab, setActiveTab] = useState<"checkout" | "products" | "sales" | "insights">("checkout");
   const [form, setForm] = useState<ProductForm>(emptyForm);
   const [productFormMessage, setProductFormMessage] = useState("");
+  const [reorderDraftMessage, setReorderDraftMessage] = useState("");
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [hasLoadedStoredCart, setHasLoadedStoredCart] = useState(false);
 
@@ -357,17 +365,7 @@ export default function Home() {
     .slice(0, 5);
   const mostUrgentReorder = reorderQueue[0];
   const supplierReorderDrafts = Object.values(
-    reorderQueue.reduce<
-      Record<
-        string,
-        {
-          supplier: string;
-          items: Array<Product & { recommendedQty: number }>;
-          totalUnits: number;
-          estimatedCost: number;
-        }
-      >
-    >((drafts, product) => {
+    reorderQueue.reduce<Record<string, SupplierReorderDraft>>((drafts, product) => {
       const supplier = product.supplier || unknownSupplier;
       const currentDraft = drafts[supplier] ?? {
         supplier,
@@ -384,6 +382,7 @@ export default function Home() {
       return drafts;
     }, {})
   ).sort((a, b) => b.estimatedCost - a.estimatedCost);
+  const totalReorderCost = supplierReorderDrafts.reduce((sum, draft) => sum + draft.estimatedCost, 0);
   const recentStockMovements = stockMovements.slice(0, 10);
   const commandInsight =
     mostUrgentReorder
@@ -447,6 +446,31 @@ export default function Home() {
   function recordStockMovements(movements: StockMovement[]) {
     if (!movements.length) return;
     setStockMovements((current) => [...movements, ...current].slice(0, 100));
+  }
+
+  async function copySupplierDraft(draft: SupplierReorderDraft, draftNumber: number) {
+    const purchaseOrderId = `PO-${todayKey().replaceAll("-", "")}-${String(draftNumber + 1).padStart(2, "0")}`;
+    const lines = draft.items.map(
+      (item) =>
+        `${item.name} (${item.barcode}) - order ${item.recommendedQty} @ ${money(item.costPrice)} = ${money(
+          item.recommendedQty * item.costPrice
+        )}`
+    );
+    const draftText = [
+      `Purchase Order Draft ${purchaseOrderId}`,
+      `Supplier: ${draft.supplier}`,
+      `Total units: ${draft.totalUnits}`,
+      `Estimated cost: ${money(draft.estimatedCost)}`,
+      "",
+      ...lines
+    ].join("\n");
+
+    try {
+      await navigator.clipboard.writeText(draftText);
+      setReorderDraftMessage(`${purchaseOrderId} copied for ${draft.supplier}.`);
+    } catch {
+      setReorderDraftMessage(`${purchaseOrderId} is ready. Browser clipboard access was not available.`);
+    }
   }
 
   function increaseStock(productId: string, quantity: number, reason: "restock" | "return") {
@@ -1091,6 +1115,10 @@ export default function Home() {
                     <span>Reorder queue</span>
                     <strong>{reorderQueue.length}</strong>
                   </div>
+                  <div className="command-metric">
+                    <span>Draft PO value</span>
+                    <strong>{money(totalReorderCost)}</strong>
+                  </div>
                 </div>
               </section>
 
@@ -1142,7 +1170,7 @@ export default function Home() {
                           <div>
                             <strong>{product.name}</strong>
                             <div className="cart-meta">
-                              {product.categoryName} | threshold {product.lowStockAt}
+                              {product.supplier} | {product.categoryName} | threshold {product.lowStockAt}
                             </div>
                           </div>
                           <div className="reorder-action">
@@ -1165,24 +1193,47 @@ export default function Home() {
                     <p className="panel-note">Low-stock replenishment grouped by supplier with estimated cost.</p>
                   </div>
                 </div>
+                {reorderDraftMessage ? (
+                  <div className="panel-message" role="status">
+                    {reorderDraftMessage}
+                  </div>
+                ) : null}
                 <div className="supplier-drafts">
                   {supplierReorderDrafts.length ? (
-                    supplierReorderDrafts.map((draft) => (
+                    supplierReorderDrafts.map((draft, draftIndex) => (
                       <article className="supplier-draft" key={draft.supplier}>
                         <div className="supplier-draft-header">
                           <div>
                             <h3>{draft.supplier}</h3>
                             <p>
+                              PO-{todayKey().replaceAll("-", "")}-{String(draftIndex + 1).padStart(2, "0")} |{" "}
                               {draft.items.length} item(s) | {draft.totalUnits} unit(s)
                             </p>
                           </div>
-                          <strong>{money(draft.estimatedCost)}</strong>
+                          <div className="supplier-draft-actions">
+                            <strong>{money(draft.estimatedCost)}</strong>
+                            <button
+                              className="mini-button"
+                              onClick={() => copySupplierDraft(draft, draftIndex)}
+                              type="button"
+                            >
+                              Copy Draft
+                            </button>
+                          </div>
                         </div>
                         <div className="draft-lines">
                           {draft.items.map((item) => (
                             <div className="draft-line" key={item.id}>
-                              <span>{item.name}</span>
-                              <strong>Order {item.recommendedQty}</strong>
+                              <div>
+                                <strong>{item.name}</strong>
+                                <span>
+                                  {item.barcode} | stock {item.stockQty} | threshold {item.lowStockAt}
+                                </span>
+                              </div>
+                              <div className="draft-line-cost">
+                                <strong>Order {item.recommendedQty}</strong>
+                                <span>{money(item.recommendedQty * item.costPrice)}</span>
+                              </div>
                             </div>
                           ))}
                         </div>
